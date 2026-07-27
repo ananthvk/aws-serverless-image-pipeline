@@ -1,0 +1,40 @@
+[project]
+name = "application"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "aws-lambda-powertools>=3.31.1",
+    "pillow>=12.3.0",
+]
+license = { text = "MIT" }
+
+[dependency-groups]
+dev = [
+    "black>=26.5.1",
+    "codespell>=2.4.3",
+    "isort>=8.0.1",
+    "mypy>=2.3.0",
+    "pytest>=9.1.1",
+    "ruff>=0.16.0",
+    "taskipy>=1.14.1",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
+[tool.taskipy.tasks]
+typecheck = "mypy -p src --strict"
+format = "ruff check . --fix && ruff format . && ruff check . --select I --fix && black . --target-version py314"
+test = "pytest"
+codespell = "codespell"
+check = "uv run task format && uv run task typecheck && uv run task test && uv run task codespell"
+
+# Run with uv run task format, uv run task test etc
+
+[tool.isort]
+profile = "black"
+
+[tool.black]
+line-length = 88
