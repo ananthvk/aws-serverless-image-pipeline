@@ -6,7 +6,11 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "aws-lambda-powertools>=3.31.1",
+    "boto3>=1.43.56",
+    "botocore[crt]>=1.43.56",
     "pillow>=12.3.0",
+    "pydantic>=2.13.4",
+    "python-ulid>=4.0.1",
 ]
 license = { text = "MIT" }
 
@@ -19,6 +23,7 @@ dev = [
     "pytest>=9.1.1",
     "ruff>=0.16.0",
     "taskipy>=1.14.1",
+    "types-boto3-custom",
 ]
 
 [tool.pytest.ini_options]
@@ -38,3 +43,6 @@ profile = "black"
 
 [tool.black]
 line-length = 88
+
+[tool.uv.sources]
+types-boto3-custom = { path = "vendored/types_boto3_custom-1.43.56-py3-none-any.whl" }

@@ -2,6 +2,7 @@ import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as cdk from "aws-cdk-lib/core";
 import * as apigateway from "aws-cdk-lib/aws-apigatewayv2";
+import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import { Construct } from "constructs";
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import { join } from "path";
@@ -24,6 +25,14 @@ export class AwsServerlessImagePipelineStack extends cdk.Stack {
       autoDeleteObjects: true,
     });
 
+    const tableName = "ImgMetadata";
+
+    const metadataTable = new dynamodb.Table(this, `${tableName}Table`, {
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      partitionKey: { name: "id", type: dynamodb.AttributeType.STRING },
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
     // This lambda handles creation of presigned S3 links for the client to upload the image, generation of id, and creating an entry
     // in the dynamodb table
     const uploadFn = new python.PythonFunction(this, "UploadFunction", {
@@ -32,10 +41,11 @@ export class AwsServerlessImagePipelineStack extends cdk.Stack {
       index: "src/handlers/upload.py",
       handler: "handler",
       bundling: {
-        assetExcludes: [".venv", ".ruff_cache", ".pytest_cache"],
+        assetExcludes: [".venv", ".ruff_cache", ".pytest_cache", "vendored"],
       },
       environment: {
         IMAGE_BUCKET_NAME: imgBucket.bucketName,
+        METADATA_TABLE_NAME: metadataTable.tableName,
       },
     });
 
@@ -43,6 +53,7 @@ export class AwsServerlessImagePipelineStack extends cdk.Stack {
     // Lambda doesn't need to call S3
     // Presigned url contains the lambda's temporary IAM credentials, so when the client uses it, S3 checks the permissions
     imgBucket.grants.put(uploadFn);
+    metadataTable.grants.readWriteData(uploadFn);
 
     // Create the API Gateway (HTTP API)
     const api = new apigateway.HttpApi(this, "ImgHttpAPI");
