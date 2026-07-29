@@ -55,6 +55,10 @@ def main():
         print(
             f"File uploaded, View at {presigned_post.upload.url}{presigned_post.object_key}"
         )
+        obj_key = Path(presigned_post.object_key)
+        print(
+            f"Thumbnail at: {presigned_post.upload.url}thumbnails/{presigned_post.image_id}/{obj_key.stem}.webp"
+        )
     except HTTPError as e:
         print(f"HTTP Error: {e.response.status_code}")
         print(f"Body: {e.response.text}")

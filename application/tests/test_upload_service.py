@@ -45,7 +45,9 @@ def test_initiate_upload_success(mock_dependencies, valid_request):
 
     # Use patch to anchor the random ULID string for exact assertion testing
     fake_ulid = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
-    object_key = f'{config.ORIGINAL_IMAGE_FOLDER_NAME}/{create_object_key(fake_ulid, "vacation_photo.jpg", ".png")}'
+    object_key = create_object_key(
+        fake_ulid, "vacation_photo.jpg", ".png", dir=config.ORIGINAL_IMAGE_FOLDER_NAME
+    )
     assert (
         object_key
         == f"{config.ORIGINAL_IMAGE_FOLDER_NAME}/{fake_ulid}/vacation-photo.png"

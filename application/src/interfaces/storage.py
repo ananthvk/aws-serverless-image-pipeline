@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import io
 
 from pydantic import BaseModel
 
@@ -14,3 +15,15 @@ class Storage(ABC):
         """
         Generates a presigned Post form
         """
+
+    @abstractmethod
+    def get_object(self, object_key: str) -> io.BytesIO:
+        pass
+    
+    @abstractmethod
+    def save_object(self, object_key: str, body: io.BytesIO):
+        pass
+
+    @abstractmethod
+    def delete_object(self, object_key: str):
+        pass

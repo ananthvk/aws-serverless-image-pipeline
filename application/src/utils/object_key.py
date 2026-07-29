@@ -37,6 +37,15 @@ def sanitize_name(filename: str) -> str:
     return basename
 
 
-def create_object_key(id: str, filename: str, ext: str) -> str:
+def create_object_key(id: str, filename: str, ext: str, dir: str = "uploads") -> str:
     filename = sanitize_name(filename)
-    return f"{id}/{filename}{ext}"
+    return f"{dir}/{id}/{filename}{ext}"
+
+
+def get_image_id_from_object_key(object_key: str) -> tuple[str, str]:
+    parts = object_key.split("/")
+    # Make sure that object key contains 3 parts - dir, id, and filename + ext
+    if len(parts) < 3:
+        raise ValueError(f"Malformed object key structure: {object_key}")
+
+    return parts[1], parts[2]

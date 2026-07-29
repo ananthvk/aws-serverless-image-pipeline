@@ -47,8 +47,9 @@ class UploadService:
             # Shouldn't happen since we check for existence in the set
             raise ValidationError("Invalid MIME type")
         image_id = f"{ulid.ULID()}"
-        object_key = create_object_key(image_id, request.filename, extension)
-        object_key = f"{config.ORIGINAL_IMAGE_FOLDER_NAME}/{object_key}"
+        object_key = create_object_key(
+            image_id, request.filename, extension, dir=config.ORIGINAL_IMAGE_FOLDER_NAME
+        )
         presigned_url = self.storage.generate_presigned_url(
             object_key, request.mime_type
         )
