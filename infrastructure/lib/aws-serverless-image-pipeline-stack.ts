@@ -4,10 +4,13 @@ import * as s3n from "aws-cdk-lib/aws-s3-notifications";
 import * as cdk from "aws-cdk-lib/core";
 import * as apigateway from "aws-cdk-lib/aws-apigatewayv2";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
+import * as sqs from "aws-cdk-lib/aws-sqs";
+import * as logs from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import { join } from "path";
 import * as python from "@aws-cdk/aws-lambda-python-alpha";
+import { SqsEventSource } from "aws-cdk-lib/aws-lambda-event-sources";
 
 export class AwsServerlessImagePipelineStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -64,7 +67,8 @@ export class AwsServerlessImagePipelineStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_14,
       index: "src/handlers/process_image.py",
       handler: "handler",
-      memorySize: 256,
+      // Give 512 MB memory since max limit of 256 was reached
+      memorySize: 512,
       timeout: cdk.Duration.seconds(30),
       bundling: {
         assetExcludes: [".venv", ".ruff_cache", ".pytest_cache", "vendored"],
@@ -77,17 +81,68 @@ export class AwsServerlessImagePipelineStack extends cdk.Stack {
     imgBucket.grants.readWrite(processFn);
     metadataTable.grants.readWriteData(processFn);
 
-    // Add an event notification so that processFn is triggered whenever a new file is uploaded
+    const deadLetterQueue = new sqs.Queue(this, "ImgDeadLetterQueue", {
+      queueName: "img-dlq",
+      // Store failed messages for longer (one week)
+      retentionPeriod: cdk.Duration.days(7),
+      // Use long polling since we don't expect that many messages to drop into the DLQ
+      receiveMessageWaitTime: cdk.Duration.seconds(20),
+    });
+
+    const imgQueue = new sqs.Queue(this, "ImgQueue", {
+      queueName: "img-resize-queue",
+      // Long polling
+      receiveMessageWaitTime: cdk.Duration.seconds(5),
+      visibilityTimeout: cdk.Duration.seconds(6 * 30),
+      deadLetterQueue: {
+        queue: deadLetterQueue,
+        // After 3 tries, it'll be sent to the DLQ
+        maxReceiveCount: 3,
+      },
+    });
+
+    // Add an event notification so that a messages is sent to the queue each time a new object is created
     imgBucket.addEventNotification(
       s3.EventType.OBJECT_CREATED,
-      new s3n.LambdaDestination(processFn),
+      new s3n.SqsDestination(imgQueue),
       {
         prefix: "uploads/",
       },
     );
 
+    // Send 10 messages at once or when the 5s timer expires
+    processFn.addEventSource(
+      new SqsEventSource(imgQueue, {
+        batchSize: 10,
+        maxBatchingWindow: cdk.Duration.seconds(5),
+        reportBatchItemFailures: true,
+      }),
+    );
+
     // Create the API Gateway (HTTP API)
-    const api = new apigateway.HttpApi(this, "ImgHttpAPI");
+    const api = new apigateway.HttpApi(this, "ImgHttpAPI", {});
+
+    // Enable logging of http api
+    const logGroup = new logs.LogGroup(this, "HttpApiLogGroup", {
+      logGroupName: `/aws/v2-api-gateway/${api.httpApiName}-access-logs`,
+      retention: logs.RetentionDays.ONE_WEEK,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    const cfnStage = api.defaultStage?.node.defaultChild as apigateway.CfnStage;
+    cfnStage.accessLogSettings = {
+      destinationArn: logGroup.logGroupArn,
+      format: JSON.stringify({
+        requestId: "$context.requestId",
+        ip: "$context.identity.sourceIp",
+        requestTime: "$context.requestTime",
+        httpMethod: "$context.httpMethod",
+        path: "$context.path",
+        status: "$context.status",
+        integrationError: "$context.integrationErrorMessage",
+      }),
+    };
+
     api.addRoutes({
       path: "/image/upload",
       methods: [apigateway.HttpMethod.POST],

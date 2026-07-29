@@ -15,6 +15,11 @@ class ProcessService:
     def process(self, object_key: str) -> None:
         # First implement only the "happy path", i.e. no checks for failed lambdas, errors, deletion of files etc
         image_id, filename = get_image_id_from_object_key(object_key)
+        
+        # Artifical failure to test DLQ
+        if "29072026-failure-xyz" in object_key:
+            raise ValueError("processing failed due")
+        
         if not self.metadata.complete_initial_upload(image_id):
             return
         if not self.metadata.change_status_conditional(

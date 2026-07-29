@@ -78,7 +78,21 @@ Limitations
 The main goal of this project is to demonstrate serverless architecture
 In a production system, additional mechanisms would typically be added, such as:
 
-- SQS between S3 and Lambda to buffer events (in case a lot of uploads occur in a burst)
-- Dead-letter queues (DLQs) for failed processing attempts (so that failures can be identified)
 - Recovery of images in `processing` state due to lambda failures / timeouts
 - Cloudwatch metrics & alarms
+
+SQS is useful here to handle burst traffic - i.e. say our concurrency limit is 100, but there is a burst upload of 10000 pics, with a queue, these events can safely wait while the lambdas clear the backlogs
+
+SQS (Simple Queue service) is a service that can be placed between producers and consumers, the producers place messages into the queue, while the consumers takes out messages and processes them. After a message is processed, it's deleted from the queue. The consumers poll the queue for new messages. SNS, S3, Lambda, etc can directly publish messages to the queue.
+
+Lambdas automatically scale depending upon the backlog of the queue
+
+The consumer must delete the message from the queue after processing, otherwise the message will get processed again by another worker indefinitely
+
+A dead letter queue is another SQS that acts as a temporary storage for failed messages, this can be helpful in identifying the cause of failures
+
+Visibility timeout: Amount of time for which the message is invisible to other consumers (when it's being processed by one worker), usually it's recommended to set it to 6x the processing time. If it's too short, the timeout occurs before processing is complete, and another worker picks up the task, which also fails, and finally the task ends up in the DLQ 
+
+When you add an event source, behind the scenes, AWS Lambda Event Source Mapping resource is created, it handles polling, and marking queue messages as done. If the lambda throws an error, the item is not marked done. Note: In case of partialfailures, aws marks the batch of 10 (or whatever batch size) as failed. Enable `reportBatchItemFailures`, and return a list of ids that have failed, so that only they can be processed again
+
+Also found `s3:TestEvent` this event in the DLQ, after reading, found out that S3 sends out this event to test if the connection is working
